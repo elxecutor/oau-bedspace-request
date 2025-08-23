@@ -3,14 +3,49 @@ from concurrent.futures import ThreadPoolExecutor
 import threading
 from time import sleep
 import random
+import json
+import os
+import logging
 
 # Shared lock for resource-sensitive operations
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    handlers=[logging.FileHandler('bedspace.log'), logging.StreamHandler()]
+)
+
 print_lock = threading.Lock()
 
 def human_delay(min=0.3, max=1.2):
     sleep(random.uniform(min, max))
 
+def is_strong_password(password):
+    # Basic password strength check
+    import re
+    if len(password) < 8:
+        return False
+    if not re.search(r'[A-Z]', password):
+        return False
+    if not re.search(r'[a-z]', password):
+        return False
+    if not re.search(r'[0-9]', password):
+        return False
+    if not re.search(r'[@$!%*?&#]', password):
+        return False
+    return True
+
 def worker(credentials, max_retries=3):
+    user_id = credentials.get('user_id')
+    password = credentials.get('password')
+    if not user_id or not password:
+        logging.error(f"Missing credentials for entry: {credentials}")
+        return False
+    if not is_strong_password(password):
+        logging.warning(f"Weak password detected for {user_id}")
+        return False
+
     for attempt in range(max_retries):
         try:
             with sync_playwright() as p:
@@ -48,7 +83,7 @@ def worker(credentials, max_retries=3):
                         raise Exception("Login verification failed")
 
                     with print_lock:
-                        print(f"✓ Login successful for {credentials['user_id']}")
+                        logging.info(f"✓ Login successful for {user_id}")
 
                     # Navigate to bedspace allocation
                     bedspace_url = 'https://eportal.oauife.edu.ng/bedspaceallocationyear31.php'
@@ -62,7 +97,7 @@ def worker(credentials, max_retries=3):
                         raise Exception("Bedspace content verification failed")
 
                     with print_lock:
-                        print(f"✓ Bedspace access for {credentials['user_id']}")
+                        logging.info(f"✓ Bedspace access for {user_id}")
 
                     # Perform bedspace operations here
                     # ...
@@ -71,7 +106,7 @@ def worker(credentials, max_retries=3):
 
                 except Exception as e:
                     with print_lock:
-                        print(f"Attempt {attempt+1} failed for {credentials['user_id']}: {str(e)}")
+                        logging.warning(f"Attempt {attempt+1} failed for {user_id}: {str(e)}")
                     page.screenshot(path=f'error_{credentials["user_id"]}_{attempt}.png')
                     continue
 
@@ -80,26 +115,28 @@ def worker(credentials, max_retries=3):
 
         except Exception as e:
             with print_lock:
-                print(f"Critical error for {credentials['user_id']}: {str(e)}")
+                logging.error(f"Critical error for {user_id}: {str(e)}")
             continue
 
     return False
 
 if __name__ == "__main__":
-    # List of credentials to process
-    credentials_list = [
-        {
-            'user_id': 'EEG/2022/040',
-            'password': 'Geekspe@123'
-        },
-        # Add more credential dictionaries as needed
-    ]
+    # Load credentials from external JSON file
+    cred_file = 'credentials.json'
+    if not os.path.exists(cred_file):
+        logging.error(f"Credentials file '{cred_file}' not found.")
+        exit(1)
+    with open(cred_file, 'r') as f:
+        credentials_list = json.load(f)
+    if not isinstance(credentials_list, list):
+        logging.error("Credentials file must contain a list of credential objects.")
+        exit(1)
 
     # Configure thread pool
-    max_workers = 3  # Adjust based on system capabilities
+    max_workers = min(5, len(credentials_list))  # Adjust based on system capabilities
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [executor.submit(worker, creds) for creds in credentials_list]
         results = [f.result() for f in futures]
 
-    success_rate = sum(results)/len(results)
-    print(f"Completed with {success_rate*100:.1f}% success rate")
+    success_rate = sum(results)/len(results) if results else 0
+    logging.info(f"Completed with {success_rate*100:.1f}% success rate")

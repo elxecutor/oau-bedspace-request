@@ -1,0 +1,6 @@
+*.json
+bedspace.log
+.venv/
+__pycache__/
+*.png
+error*/
