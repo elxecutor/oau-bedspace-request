@@ -70,7 +70,7 @@ def worker(credentials, max_retries=3):
                     human_delay(0.3, 0.8)
 
                     # Select session/semester
-                    page.select_option('select[name="SessionF"]', '2023')
+                    page.select_option('select[name="SessionF"]', '2024')
                     page.select_option('select[name="SemesterF"]', '1')
                     human_delay()
 
