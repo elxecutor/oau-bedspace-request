@@ -100,7 +100,16 @@ def worker(credentials, max_retries=3):
                         logging.info(f"✓ Bedspace access for {user_id}")
 
                     # Perform bedspace operations here
-                    # ...
+                    # Select male gender
+                    page.select_option('select[name="gender"]', 'male')
+                    human_delay()
+
+                    # Click apply button
+                    page.click('input[type="submit"][value="Apply"]')
+                    human_delay()
+
+                    with print_lock:
+                        logging.info(f"✓ Bedspace request submitted for {user_id}")
 
                     return True
 
